@@ -1,4 +1,4 @@
-import signal, time
+import signal, time, os
 import requests
 import websocket
 import json
@@ -20,12 +20,13 @@ def signal_handler(signum, frame):
     shutdown = True
 
 
-ETHEREUM_ADDRESS = '0x1B4d52f4277936c021C3Bfe23E2D089d02CA2b5A'
-API_KEYS = {"key": "a5cf471e-772b-975f-9aa4-e5c02d3f4b8b",
-            "secret": "8tYZROA1A-4cdpZmHI1sERVISxv2P_uoGvXQr54k",
-            "passphrase": "QmmBBu0eFLdLG4S5vpSD",
-            "legacySigning": False, "walletType": "METAMASK"}
-STARK_PRIVATE_KEY = '06decbee13a995049937a5e60bd3eb3aeb0164ffb48d84005f0a57b506e5a8ce'
+ETHEREUM_ADDRESS = os.environ['ETH_ADDRESS']
+API_KEYS = {"key": os.environ['API_KEY'],
+            "secret": os.environ['API_secret'],
+            "passphrase": os.environ['API_passphrase'],
+            "legacySigning": os.environ['API_legacySigning'],
+            "walletType": os.environ['API_walletType']}
+STARK_PRIVATE_KEY = os.environ['STARK_PRIVATE_KEY']
 shutdown = False
 # other settings for market making algo
 SPREAD = 0.02
@@ -111,7 +112,7 @@ def make_market():
                'size': str(BID_SIZE),
                'price': '4.5',
                'limit_fee': '0.015',
-               'expiration_epoch_seconds': time.time() + 120}
+               'expiration_epoch_seconds': time.time() + 1800}
 
     make_order(client, payload)
 
@@ -138,6 +139,8 @@ def main():
                                 on_close=on_close)
     # ws.run_forever()
     make_market()
+
+    # print(API_KEYS)
 
 
 if __name__ == "__main__":
