@@ -1,10 +1,10 @@
-import signal, time, os
-import requests
-import websocket
 import json
-from dydx3 import Client
-from web3 import Web3
+import os
+import signal
+import time
 
+import websocket
+from dydx3 import Client
 from dydx3.constants import *
 
 

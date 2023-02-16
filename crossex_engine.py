@@ -4,7 +4,8 @@ import json
 
 import datetime as dt
 
-class perceiver:
+
+class Perceiver:
     def __init__(self):
         self.servers = []
 
@@ -43,6 +44,8 @@ class perceiver:
             print('===========')
 
         await asyncio.gather(*tasks)
+
+
 '''
 multi_ws_client = perceiver()
 multi_ws_client.add_server("ws://localhost:8000", "updates")

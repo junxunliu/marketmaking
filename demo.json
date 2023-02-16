@@ -1,0 +1,4 @@
+[
+  {"arg":{"channel":"bbo-tbt","instId":"DOGE-USDT-SWAP"},"data":[{"asks":[["0.08639","26","0","3"]],"bids":[["0.08638","10","0","3"]],"ts":"1676445076762"}]},
+  {"type":"channel_data","connection_id":"cf6a8ed1-1af2-424f-b688-a19f4273f260","message_id":92,"id":"ETH-USD","channel":"v3_orderbook","contents":{"offset":"2554908863","bids":[["1549.8","0"],["1548.5","0"],["1547.1","38.229"]],"asks":[["1553.1","0"],["1554.9","0"],["1556.6","38.229"]]}}
+]
