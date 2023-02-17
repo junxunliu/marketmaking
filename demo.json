@@ -1,4 +1,28 @@
 [
   {"arg":{"channel":"bbo-tbt","instId":"DOGE-USDT-SWAP"},"data":[{"asks":[["0.08639","26","0","3"]],"bids":[["0.08638","10","0","3"]],"ts":"1676445076762"}]},
-  {"type":"channel_data","connection_id":"cf6a8ed1-1af2-424f-b688-a19f4273f260","message_id":92,"id":"ETH-USD","channel":"v3_orderbook","contents":{"offset":"2554908863","bids":[["1549.8","0"],["1548.5","0"],["1547.1","38.229"]],"asks":[["1553.1","0"],["1554.9","0"],["1556.6","38.229"]]}}
+  {"type":"channel_data","connection_id":"cf6a8ed1-1af2-424f-b688-a19f4273f260","message_id":92,"id":"ETH-USD","channel":"v3_orderbook","contents":{"offset":"2554908863","bids":[["1549.8","0"],["1548.5","0"],["1547.1","38.229"]],"asks":[["1553.1","0"],["1554.9","0"],["1556.6","38.229"]]}},
+  {
+    "order": {
+      "id": "421af786e5cd8a00cf9c10f90d9af51b7e15775ee3f921fe2d31bd84a5b40d8",
+      "clientId": "968820357783168",
+      "accountId": "4cd8a3bc-d8c7-5399-80bc-8099684707ad",
+      "market": "FIL-USD",
+      "side": "BUY",
+      "price": "4.5",
+      "triggerPrice": "None",
+      "trailingPercent": null,
+      "size": 1,
+      "reduceOnlySize": null,
+      "remainingSize": 1,
+      "type": "LIMIT",
+      "createdAt": "2023-02-17T02: 19: 29.109Z",
+      "unfillableAt": null,
+      "expiresAt": "2023-02-17T02: 49: 29.020Z",
+      "status": "PENDING",
+      "timeInForce": "GTT",
+      "postOnly": false,
+      "reduceOnly": false,
+      "cancelReason": null
+    }
+  }
 ]

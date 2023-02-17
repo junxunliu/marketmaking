@@ -104,8 +104,7 @@ def make_market():
 
     position_id = account.data.get('account').get('positionId')
     print(position_id)
-    payload = {'position_id': position_id,
-               'market': market_id,
+    payload = {'market': market_id,
                'side': ORDER_SIDE_BUY,
                'order_type': ORDER_TYPE_LIMIT,
                'post_only': False,
@@ -114,12 +113,12 @@ def make_market():
                'limit_fee': '0.015',
                'expiration_epoch_seconds': time.time() + 1800}
 
-    make_order(client, payload)
+    make_order(client, position_id, payload)
 
 
-def make_order(client, payload):
-    request = client.private.create_order(**payload)
-    print(request.data)
+def make_order(client, position_id, payload):
+    request = client.private.create_order(position_id, **payload)
+    print(request.data.get('order').get('id'))
 
 
 def on_error(ws, error):
