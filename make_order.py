@@ -6,7 +6,7 @@ ASK_SIZE = 1
 
 # develop a method to calculate the delay time here
 def time_slept() -> float:
-    return 0.01
+    return 0.5
 
 
 class MakeMarket:
@@ -16,9 +16,11 @@ class MakeMarket:
         self.client = client
         self.position_id = client.private.get_account().data.get('account').get('positionId')
 
-    def post_order(self, payload, count=1) -> list:
+    def post_order(self, payload, side, price, count=1) -> list:
         """
         Post orders
+        :param price: price of this order
+        :param side: buy or sell
         :param payload: a dictionary of loading parameters
         :param count: number of order want to be posted, default 1
         :return: List of order ids
@@ -26,22 +28,22 @@ class MakeMarket:
 
         ret = []
         for i in range(count):
-            order = self.client.private.create_order(self.position_id, payload).data.get('order')
+            order = self.client.private.create_order(self.position_id, payload, side, price).data.get('order')
             order_id = order.get('id')
             ret.append(order_id)
             sleep(time_slept())  # should develop a method to calculate the sleep time
 
         return ret
 
-    def re_order(self, payload: dict, remain_size=False):
+    def re_order(self, payload: dict, side, price, remain_size=False):
         # get list of canceled orders -> list of dict
-        orders = self.cancel_active_order(payload.get('market'), payload.get('side')).data.get('cancelOrders')
+        orders = self.cancel_active_order(payload.get('market'), side).data.get('cancelOrders')
         # re-post the orders
         for order in orders:
             size = order.get('remainingSize')
             if remain_size:
                 payload.update({"size": str(size)})
-            self.post_order(payload)
+            self.post_order(payload, side, price)
 
     # cancel an order
     def cancel_order_by_id(self, order_id):
