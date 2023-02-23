@@ -81,7 +81,20 @@ account_channel = {
 orderbook_channel = {
         "type": "subscribe",
         "channel": "v3_orderbook",
-        "id": 'FIL-USD'
+        "id": market_id,
+        "includeOffsets": "True"
+}
+
+trades_channel = {
+        "type": "subscribe",
+        "channel": "v3_trades",
+        "id": market_id
+}
+
+markets_channel = {
+        "type": "subscribe",
+        "channel": "v3_markets",
+        "id": market_id
 }
 
 okx_channel = {
@@ -96,7 +109,7 @@ def on_open(ws):
     ws.send(json.dumps({
         "type": "subscribe",
         "channel": "v3_trades",
-        "id": 'FIL-USD'
+        "id": market_id
     }))
 
 
@@ -129,14 +142,14 @@ def make_market():
     # Access public API endpoints.
 
     all_orders = client.private.get_orders(
-        market=MARKET_FIL_USD,
+        market=market_id,
         status=ORDER_STATUS_OPEN,
         side=ORDER_SIDE_SELL,
         # type=ORDER_TYPE_LIMIT
     ).data
 
     all_fills = client.private.get_fills(
-        market=MARKET_FIL_USD,
+        market=market_id,
     )
 
     position_id = account.get('positionId')
@@ -180,10 +193,11 @@ def main():
 
 
 if __name__ == "__main__":
-    multi_ws_ex = crossex_engine.Perceiver()
-    dict1, dict2, dict3 = {}, {}, {}
+    multi_ws_ex = crossex_engine.Perceiver(client)
     while True:
-        multi_ws_ex.add_server(WS_HOST_GOERLI, orderbook_channel)
+        multi_ws_ex.add_server(WS_HOST_MAINNET, orderbook_channel)
         multi_ws_ex.add_server(WS_HOST_GOERLI, account_channel)
+        multi_ws_ex.add_server(WS_HOST_MAINNET, trades_channel)
+        # multi_ws_ex.add_server(WS_HOST_MAINNET, markets_channel)
         multi_ws_ex.add_server('wss://ws.okx.com:8443/ws/v5/public', okx_channel)
         asyncio.run(multi_ws_ex.multi_tasks())
