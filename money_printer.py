@@ -1,20 +1,19 @@
 from dydx3 import Client
-from dydx3.constants import *
 from dydx3.helpers.request_helpers import generate_now_iso
 
-import datetime as dt
 
-class Mid_relay:
+def sub_or_unsub(method):
+    if method == 1:
+        return 'subscribe'
+
+    elif method == -1:
+        return 'unsubscribe'
+
+
+class Mediator:
     def __init__(self, client: Client):
         self.client = client
         self.position_id = client.private.get_account().data['account']['positionId']
-
-    def sub_or_unsub(self, method):
-        if method == 1:
-            return 'subscribe'
-
-        elif method == -1:
-            return 'unsubscribe'
 
     def signature_dYdX(self, path, channel, method):
         request_path = '/' + path + '/' + channel
@@ -27,10 +26,10 @@ class Mid_relay:
         )
         return signature
 
-    def connect_accounts_dYdX(self, type, channel):
+    def connect_accounts_dYdX(self, sub_type, channel):
         sig = self.signature_dYdX(path='ws', channel=channel, method='GET')
         req = {
-            'type': type,
+            'type': sub_or_unsub(sub_type),
             'channel': 'v3_' + channel,
             'accountNumber': '0',
             'apiKey': self.client.api_key_credentials['key'],
@@ -40,59 +39,71 @@ class Mid_relay:
         }
         return req
 
-    def connect_orderbook_dYdX(self, type, channel, token):
+    @staticmethod
+    def connect_dYdX(sub_type, channel, token=None, includeOffsets=False):
         req = {
-            'type': self.sub_or_unsub(method=type),
+            'type': sub_or_unsub(sub_type),
             'channel': 'v3_' + channel,
-            'id': token + '-USD',
-            'includeOffsets': True
         }
+        if token:
+            req.update({'id': token + '-USD'})
+        if includeOffsets:
+            req.update({'includeOffsets': True})
         return req
 
-    def connect_orderbook_okx(self, type, token):
+    @staticmethod
+    def connect_orderbook_okx(sub_type, token):
         okx_req = {
-            'op': self.sub_or_unsub(method=type),
+            'op': sub_or_unsub(sub_type),
             'args': [{'channel': 'bbo-tbt',
                       'instId': token + '-USDT-SWAP'}]
         }
         return okx_req
 
-    def create_limit_order(self, token, side, sz, px):
-        placed_order = self.client.private.create_order(
-            position_id=self.position_id,
-            market=token + '-USD',
-            side=side,
-            order_type=ORDER_TYPE_LIMIT,
-            post_only=False,
-            size=sz,
-            price=px,
-            limit_fee='0.0015',
-            expiration_epoch_seconds=600,
-            time_in_force=TIME_IN_FORCE_GTT,
-        )
+    def post_order(self, payload, side, price, count=1) -> list:
+        """
+        Post orders
+        :param price: price of this order
+        :param side: buy or sell
+        :param payload: a dictionary of loading parameters
+        :param count: number of order want to be posted, default 1
+        :return: List of order ids
+        """
+        payload.update({"position_id": self.position_id})
+        payload.update({"side": side})
+        payload.update({"price": price})
+
+        # order_ids = []
+        # for i in range(count):
+        order = self.client.private.create_order(**payload).data.get('order')
+        # order_id = order.get('id')
+        # order_ids.append(order_id)
+
+        return order
+
+    def re_order(self, order_ids, payload, price, new_size=False, size=None):
+        order_ids_ = []
+        # repost the order by id to cancel previous order
+        for order_id in order_ids:
+            if new_size:
+                payload.update({"size": str(size)})
+            payload.update({"price": str(price)})
+            order = self.client.private.create_order(
+                self.position_id, cancel_id=order_id, **payload).data.get('order')
+            order_id_ = order.get('id')
+            order_ids_.append(order_id_)
+        return order_ids_
+
+    # cancel an order
+    def cancel_order_by_id(self, order_id):
+        cancel_orders = self.client.private.cancel_order(order_id)
+        return cancel_orders
+
+    # cancel active orders, may specific to side and id
+    def cancel_active_order(self, token, order_side=None, order_id=None):
+        cancel_orders = self.client.private.cancel_active_orders(token + '-USD', order_side, order_id)
+        return cancel_orders
 
     def cancel_all_order(self, token):
-        clean_order = self.client.private.cancel_all_orders(market=token + 'USD')
-
-
-class M_making(Mid_relay):
-    def __init__(self, client: Client):
-        super(M_making, self).__init__(client)
-        self.bid_d = 0
-        self.ask_d = 0
-        self.bid_o = 0
-        self.ask_o = 0
-
-    def parse_message(self, res, exg, dydx_bids, dydx_asks, okx_bid, okx_ask):
-        if exg == 'op':
-            if res['arg']['channel'] == 'bbo-tbt':
-                self.bid_o = okx_bid
-                self.ask_o = okx_ask
-
-        if exg == 'type':
-            if res['type'] == 'channel_data':
-                if res['channel'] == 'v3_orderbook':
-                    self.bid_d = dydx_bids[0]['price']
-                    self.ask_d = dydx_asks[0]['price']
-
-        print(dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S:%f'), self.bid_o, self.ask_o, self.bid_d, self.ask_d)
+        canceled_orders = self.client.private.cancel_all_orders(market=token + '-USD')
+        return canceled_orders

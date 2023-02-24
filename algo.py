@@ -1,141 +1,202 @@
-import time
-from decimal import Decimal
-
-from dydx3.constants import ORDER_SIDE_BUY, ORDER_TYPE_LIMIT, ORDER_SIDE_SELL
 from dydx3 import Client
-
-import make_order
-
-BID_SIZE = 1
-ASK_SIZE = 1
-SPREAD = 0.02
-MARKET = 'FIL-USD'
-
-bid_price_, ask_price_ = '0', '0'
-
-dicts = {'bids': {}, 'asks': {}}
-
-offsets = {}
-offset = 0
+from dydx3.constants import *
+import money_printer
+import datetime as dt
+import config
 
 
-def parse_message(msg_):
-    global dicts, offsets, offset
-
-    if msg_["type"] == "subscribed":
-        for side, data in msg_['contents'].items():
-            for entry in data:
-                size = entry['size']
-                if size > 0:
-                    price = entry['price']
-                    dicts[str(side)][price] = size
-
-                    offset = entry["offset"]
-                    offsets[price] = offset
-
-    if msg_["type"] == "channel_data":
-        # parse updates
-        for side, data in msg_['contents'].items():
-            if side == 'offset':
-                offset = int(data)
-                continue
-            else:
-                for entry in data:
-                    price = entry[0]
-                    amount = entry[1]
-
-                    if price in offsets and offset <= int(offsets[price]):
-                        continue
-
-                    offsets[price] = offset
-                    if amount == 0:
-                        if price in dicts[side]:
-                            del dicts[side][price]
-                    else:
-                        try:
-                            dicts[side].append((price, amount))
-                        except AttributeError:
-                            dicts[side][price] = amount
-
-
-def get_bid_ask(orderbook: dict):
-    best_bid, best_ask = 0, 0
-    if orderbook['type'] == 'subscribed':
-        best_bid = max(orderbook['contents']['bids'], key=lambda x: x['price'])
-        best_ask = min(orderbook['contents']['asks'], key=lambda x: x['price'])
-    elif orderbook['type'] == 'channel_data':
-        bids = orderbook['contents']['bids']
-        asks = orderbook['contents']['bids']
-        curr_bid, curr_ask = 0, 0
-        if bids:
-            curr_bid = orderbook['contents']['bids'][0][0]
-        if asks:
-            curr_ask = orderbook['contents']['asks'][0][0]
-        best_bid = max(best_bid, curr_bid)
-        best_ask = min(best_ask, curr_ask)
-    print('bids:', best_bid)
-    print('asks:', best_ask)
-    # try:
-    #     best_bid = max(dicts["bids"].keys())
-    #     best_ask = min(dicts["asks"].keys())
-    #     print('bid:', best_bid)
-    #     print('ask:', best_ask)
-    #     print('====================================')
-    # except Exception as e:
-    #     print(e)
-    # global bid_price_, ask_price_
-    # book_type = orderbook.get('type')
-    # contents = orderbook.get("contents")
-    # if book_type == 'subscribed':
-    #     bid_price_, ask_price_ = contents.get("bids")[0].get('price'), contents.get("asks")[0].get('price')
-    # elif book_type == 'channel_data':
-    #     bids, asks = contents.get("bids"), contents.get("asks")
-    #     if bids:
-    #         bid_price_ = bids[0][0]
-    #     if asks:
-    #         ask_price_ = asks[0][0]
-    #
-    # return bid_price_, ask_price_
-
-
-def get_close_price(trades: dict):
-    return trades.get("contents").get('price')
-
-
-class Algo:
+class Algo(money_printer.Mediator):
 
     def __init__(self, client: Client):
-        self.client = client
+        super(Algo, self).__init__(client)
+        self.bid_d = 0
+        self.ask_d = 0
+        self.close_price = 0
+        self.open_orders = []
 
-    def run_algo(self, okx, dydx_book, dydx_trades, dydx_accounts=None):
-        maker = make_order.MakeMarket(self.client)
+        self.bids_orderbook = []
+        self.asks_orderbook = []
+        self.local_offset = 0
+        self.okx_bid = 0
+        self.okx_ask = 0
+        self.market = ''
 
-        close_price = dydx_trades.get('price')
-        # buy_price = close_price - SPREAD
-        # sell_price = close_price + SPREAD
-        get_bid_ask(dydx_book)
-        # bid_price, ask_price = get_bid_ask(dydx_book)
-        # print("bid: ", bid_price, "ask: ", ask_price)
+    def build_orderbook(self, res):
+        orderbook = res['contents']
+        cancel_bid = []
+        cancel_ask = []
+        self.bids_orderbook = orderbook['bids']
+        self.asks_orderbook = orderbook['asks']
+        for i in range(0, len(self.bids_orderbook)):
+            self.bids_orderbook[i]['size'] = float(self.bids_orderbook[i]['size'])
+            self.bids_orderbook[i]['price'] = float(self.bids_orderbook[i]['price'])
+            self.bids_orderbook[i]['offset'] = float(self.bids_orderbook[i]['offset'])
+            if self.bids_orderbook[i]['size'] == 0:
+                now_px = self.bids_orderbook[i]['price']
+                for j in range(0, len(self.asks_orderbook)):
+                    if float(self.asks_orderbook[j]['price']) == now_px:
+                        if float(self.asks_orderbook[j]['size']) != 0:
+                            cancel_bid.append(i)
+                            break
 
-        # payload = {'market': MARKET,
-        #            'order_type': ORDER_TYPE_LIMIT,
-        #            'post_only': False,
-        #            'size': str(BID_SIZE),
-        #            'limit_fee': '0.015',
-        #            'expiration_epoch_seconds': time.time() + 1800}
-        #
-        # # check if it has 0 open orders
-        # if not orders:
-        #     # buy and sell
-        #     maker.post_order(payload, ORDER_SIDE_BUY, buy_price)
-        #     maker.post_order(payload, ORDER_SIDE_SELL, sell_price)
-        #     orders = self.get_orders()
-        #
-        # # check if you don't have a pair of open orders
-        # # sell orders left in book
-        # buy_orders = self.get_orders(ORDER_SIDE_BUY)
-        # sell_orders = self.get_orders(ORDER_SIDE_SELL)
-        # if not buy_orders and sell_orders:
-        #     last_sell_price = sell_orders[0].get('price')
-        #     while last_sell_price > bid_price:
-        #         pass
+        for m in range(0, len(self.asks_orderbook)):
+            self.asks_orderbook[m]['size'] = float(self.asks_orderbook[m]['size'])
+            self.asks_orderbook[m]['price'] = float(self.asks_orderbook[m]['price'])
+            self.asks_orderbook[m]['offset'] = float(self.asks_orderbook[m]['offset'])
+            if self.asks_orderbook[m]['size'] == '0':
+                now_px = self.asks_orderbook[m]['price']
+                for n in range(0, len(self.bids_orderbook)):
+                    if self.bids_orderbook[n]['price'] == now_px:
+                        if self.bids_orderbook[n]['size'] != '0':
+                            cancel_ask.append(m)
+                            break
+
+        if cancel_bid:
+            del self.bids_orderbook[:len(cancel_bid)]
+
+        if cancel_ask:
+            del self.asks_orderbook[:len(cancel_ask)]
+
+    def maintain_orderbook(self, res):
+        orderbook = res['contents']
+        if int(orderbook['offset']) > self.local_offset:
+            self.local_offset = int(orderbook['offset'])
+            bid_top_insert = []
+            ask_top_insert = []
+            bid_mid_insert = {}
+            ask_mid_insert = {}
+            if orderbook['bids']:
+                for i in range(0, len(orderbook['bids'])):
+                    bid_px = float(orderbook['bids'][i][0])
+                    bid_sz = float(orderbook['bids'][i][1])
+                    elm = {'price': bid_px,
+                           'offset': self.local_offset,
+                           'size': bid_sz}
+                    if bid_px < self.asks_orderbook[0]['price']:
+                        for j in range(0, len(self.bids_orderbook)):
+                            if bid_px > self.bids_orderbook[j]['price']:
+                                bid_top_insert.append(elm)
+                                break
+
+                            elif bid_px == self.bids_orderbook[j]['price']:
+                                self.bids_orderbook[j] = elm
+                                break
+
+                            else:
+                                if j + 2 < len(self.bids_orderbook):
+                                    if bid_px > self.bids_orderbook[j + 1]['price']:
+                                        bid_mid_insert[j + 1] = elm
+                                        break
+
+                    else:
+                        for k in range(0, len(self.asks_orderbook)):
+                            if self.asks_orderbook[k]['price'] == bid_px:
+                                del self.asks_orderbook[:k + 1]
+                                break
+
+                if bid_mid_insert != {}:
+                    for i in bid_mid_insert.keys():
+                        self.bids_orderbook.insert(i, bid_mid_insert[i])
+
+                if bid_top_insert:
+                    bid_top_insert.reverse()
+                    for i in range(0, len(bid_top_insert)):
+                        self.bids_orderbook.insert(0, bid_top_insert[i])
+
+            if orderbook['asks']:
+                for i in range(0, len(orderbook['asks'])):
+                    ask_px = float(orderbook['asks'][i][0])
+                    ask_sz = float(orderbook['asks'][i][1])
+                    elm = {'price': ask_px,
+                           'offset': self.local_offset,
+                           'size': ask_sz}
+                    if ask_px > self.bids_orderbook[0]['price']:
+                        for j in range(0, len(self.asks_orderbook)):
+                            if ask_px < self.asks_orderbook[j]['price']:
+                                ask_top_insert.append(elm)
+                                break
+
+                            elif ask_px == self.asks_orderbook[j]['price']:
+                                self.asks_orderbook[j] = elm
+                                break
+
+                            else:
+                                if j + 2 < len(self.asks_orderbook):
+                                    if ask_px < self.asks_orderbook[j + 1]['price']:
+                                        ask_mid_insert[j + 1] = elm
+                                        break
+
+                    else:
+                        for k in range(0, len(self.bids_orderbook)):
+                            if self.bids_orderbook[k]['price'] == ask_px:
+                                del self.bids_orderbook[:k + 1]
+                                break
+
+                if ask_mid_insert != {}:
+                    for i in ask_mid_insert.keys():
+                        self.asks_orderbook.insert(i, ask_mid_insert[i])
+
+                if ask_top_insert:
+                    ask_top_insert.reverse()
+                    for i in range(0, len(ask_top_insert)):
+                        self.asks_orderbook.insert(0, ask_top_insert[i])
+
+    def distribution_relay(self, res, exg):
+        if exg == 'op':
+            if res['arg']['channel'] == 'bbo-tbt':
+                if res['arg']['instId'][:-10] == self.market:
+                    if 'data' in res:
+                        okx_bids = res['data'][0]['bids']
+                        okx_asks = res['data'][0]['asks']
+                        self.okx_bid = float(okx_bids[0][0])
+                        self.okx_ask = float(okx_asks[0][0])
+
+        if exg == 'type':
+            if res['type'] == 'subscribed':
+                if res['channel'] == 'v3_orderbook':
+                    self.build_orderbook(res)
+
+            if res['type'] == 'channel_data':
+                if res['channel'] == 'v3_orderbook':
+                    self.maintain_orderbook(res)
+                    self.bid_d = self.bids_orderbook[0]['price']
+                    self.ask_d = self.asks_orderbook[0]['price']
+                    if self.market != res['id'][:-4]:
+                        self.market = res['id'][:-4]
+                        print(dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                              ' | trading token: ', self.market)
+                # trade book
+                elif res['channel'] == 'v3_trades':
+                    self.close_price = res['contents']['trades'][0]['price']
+                    # account book
+                elif res['channel'] == 'v3_accounts':
+                    print(res)
+                    orders = res['contents']['orders']
+                    for order in orders:
+                        if order['status'] == 'OPEN':
+                            self.open_orders.append(order)
+                        if order['status'] == 'CANCELED' or order['status'] == 'FILLED':
+                            self.open_orders[:] = [d for d in self.open_orders[:] if d.get('id') != order['id']]
+
+    def run_algo(self):
+        bid_price, ask_price, close_price = self.bid_d, self.ask_d, self.close_price
+        if close_price == 0:
+            close_price = (float(bid_price) + float(ask_price)) / 2
+        buy_price = str(round(float(close_price) - config.spread, 2))
+        sell_price = str(round(float(close_price) + config.spread, 2))
+        # current no orders in the book
+        if len(self.open_orders) == 0 and bid_price != 0 and ask_price != 0:
+            print(self.open_orders)
+            payload = {
+                'market': config.token + '-USD',
+                'order_type': config.order_type,
+                'post_only': False,
+                'size': config.size,
+                'limit_fee': config.limit_fee,
+                'expiration_epoch_seconds': config.expire_time,
+            }
+            # submit a pair of orders, get list of ids for reorder
+            # buy_order = self.post_order(payload, ORDER_SIDE_BUY, buy_price)
+            # sell_order = self.post_order(payload, ORDER_SIDE_SELL, sell_price)
+        print(dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S:%f'),
+              self.okx_bid, self.okx_ask, bid_price, ask_price, close_price)
