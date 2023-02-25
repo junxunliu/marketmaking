@@ -82,7 +82,6 @@ class Mid_relay:
 class M_making(Mid_relay):
     def __init__(self, client: Client):
         super(M_making, self).__init__(client=client)
-        self.mr = Mid_relay(client=client)
         self.token = ''
         self.ticks = 0
 
@@ -134,7 +133,7 @@ class M_making(Mid_relay):
             if self.pos_side == 'SHORT' or self.pos_side == 0:
                 sz = abs(self.pos_size) + 1
 
-            bid_ids = self.mr.create_limit_order(token=self.token,
+            bid_ids = self.create_limit_order(token=self.token,
                                                  side='BUY',
                                                  sz=int(sz),
                                                  px=round(self.ask_d - self.bid_d * 0.0005, 3),
@@ -164,7 +163,7 @@ class M_making(Mid_relay):
             if self.pos_side == 'LONG' or self.pos_side == 0:
                 sz = abs(self.pos_size) + 1
 
-            ask_ids = self.mr.create_limit_order(token=self.token,
+            ask_ids = self.create_limit_order(token=self.token,
                                                  side='SELL',
                                                  sz=int(sz),
                                                  px=round(self.bid_d + self.ask_d * 0.0005, 3),
@@ -176,7 +175,7 @@ class M_making(Mid_relay):
         bid_gap = abs(bid - self.bid_o)
         ask_gap = abs(self.ask_o - ask)
         if bid_gap > ask * 0.0013 or ask_gap > bid * 0.0013:
-            self.mr.cancel_all_order(token=self.token)
+            self.cancel_all_order(token=self.token)
             self.ord_ids_bid.clear()
             self.ord_ids_ask.clear()
 
