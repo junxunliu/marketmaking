@@ -37,7 +37,6 @@ class Perceiver:
                         js_res = await asyncio.wait_for(ws.recv(), timeout=25)
                         res = json.loads(js_res)
                         self.algo.distribution_relay(res=res, exg=exg)
-                        self.algo.run_algo()
                         if self.task_break == 1:
                             self.task_break = 0
                             break
