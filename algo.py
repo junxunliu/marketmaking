@@ -16,7 +16,6 @@ class Algo(Mediator):
         self.local_offset = 0
         self.token = ''
         self.time = 0
-        self.pair = False
 
         self.bid_d = 0
         self.ask_d = 0
@@ -123,6 +122,7 @@ class Algo(Mediator):
 
                 elif res['channel'] == 'v3_accounts':
                     self.check_account(res)
+                    print(res)
 
     def check_account(self, res):
         orders = res['contents']['orders']
@@ -135,17 +135,15 @@ class Algo(Mediator):
                     self.del_order('buys', order_id)
                 elif order['status'] == 'CANCELED':
                     self.del_order('buys', order_id)
-                elif order['status'] == 'OPEN':
-                    self.open_orders['buys'].append(order)
+                    self.time = time()
             else:
                 if order['status'] == 'FILLED':
                     self.filled_orders['sells'].append(order)
                     self.del_order('sells', order_id)
                 elif order['status'] == 'CANCELED':
                     self.del_order('sells', order_id)
-                elif order['status'] == 'OPEN':
                     self.time = time()
-                    self.open_orders['sells'].append(order)
+
         # print(self.open_orders)
 
     def del_order(self, buys_or_sells, order_id):
@@ -156,6 +154,23 @@ class Algo(Mediator):
     def buy_sell(self, payload, to_buy, to_sell):
         buy_order = self.post_order(payload, ORDER_SIDE_BUY, to_buy)
         sell_order = self.post_order(payload, ORDER_SIDE_SELL, to_sell)
+        self.open_orders['buys'].append(buy_order)
+        self.open_orders['sells'].append(sell_order)
+
+    def reorder(self, payload, side, price, buys_sells, order_id):
+        size = self.open_orders[buys_sells][0]['remainingSize']
+        payload.update({"size": size})
+        order = self.post_order(payload, side, price, cancel_id=order_id)
+        # re-post order by cancel id won't have status canceled so del order here:
+        self.del_order(buys_sells, order_id)
+        if buys_sells == 'buys':
+            self.bids_orderbook[buys_sells].append(order)
+        else:
+            self.asks_orderbook[buys_sells].append(order)
+        self.time = time()
+
+    def stop_strategy(self):
+        pass
 
     def run_algo(self):
         bid_price, ask_price, close_price = float(self.bid_d), float(self.ask_d), float(self.close_price)
@@ -167,13 +182,12 @@ class Algo(Mediator):
             # print(self.open_orders)
             global prev_bid, prev_ask
             # current no orders in the book
-            if not self.open_orders['buys'] and not self.open_orders['sells'] and not self.pair:
+            if not self.open_orders['buys'] and not self.open_orders['sells']:
                 # reset filled orders
                 self.filled_orders['buys'].clear()
                 self.filled_orders['sells'].clear()
                 # submit a pair of orders, get list of ids for reorder
                 self.buy_sell(config.payload, buy_price, sell_price)
-                self.pair = True
                 prev_bid, prev_ask = bid_price, ask_price
                 print("prev_bid, prev_ask", prev_bid, prev_ask)
             if time() - self.time > 1:
@@ -190,17 +204,12 @@ class Algo(Mediator):
                     if bid_price < prev_sell_price:
                         print("prev_sell_price: ", prev_sell_price, "bid_price", bid_price)
                         to_buy = bid_price
-                        self.post_order(config.payload, ORDER_SIDE_BUY, to_buy, cancel_id=order_id)
-                        # re-post order by cancel id won't have status canceled so del order here:
-                        self.del_order('buys', order_id)
+                        self.reorder(config.payload, ORDER_SIDE_BUY, to_buy, 'buys', order_id)
 
                     elif to_buy < prev_ask:
                         print("to_buy: ", to_buy, "prev_ask", prev_ask)
                         to_buy = to_buy + config.spread / 2
-
-                        self.post_order(config.payload, ORDER_SIDE_BUY, to_buy, cancel_id=order_id)
-                        # re-post order by cancel id won't have status canceled so del order here:
-                        self.del_order('buys', order_id)
+                        self.reorder(config.payload, ORDER_SIDE_BUY, to_buy, 'buys', order_id)
 
                 # sell orders still were not filled
                 elif self.open_orders['sells'] and not self.open_orders['buys'] and self.filled_orders['buys']:
@@ -211,15 +220,11 @@ class Algo(Mediator):
                     if ask_price > prev_buy_price:
                         print("prev_buy_price: ", prev_buy_price, "ask_price", ask_price)
                         to_sell = ask_price
-                        self.post_order(config.payload, ORDER_SIDE_SELL, to_sell, cancel_id=order_id)
-                        # re-post order by cancel id won't have status canceled so del order here:
-                        self.del_order('sells', order_id)
+                        self.reorder(config.payload, ORDER_SIDE_SELL, to_sell, 'sells', order_id)
                     elif to_sell > prev_bid:
                         print("to_sell: ", to_sell, "prev_bid", prev_bid)
                         to_sell = to_sell - config.spread / 2
-                        self.post_order(config.payload, ORDER_SIDE_SELL, to_sell, cancel_id=order_id)
-                        # re-post order by cancel id won't have status canceled so del order here:
-                        self.del_order('sells', order_id)
+                        self.reorder(config.payload, ORDER_SIDE_SELL, to_sell, 'sells', order_id)
         #
         # print(dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S:%f'),
         #       self.bid_d, self.ask_d)

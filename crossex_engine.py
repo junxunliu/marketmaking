@@ -22,9 +22,9 @@ class Perceiver:
         acc_req = self.algo.connect_accounts_dYdX(sub_type=1, channel='accounts')
         ord_dydx = self.algo.connect_dYdX(sub_type=1, channel='orderbook', token=token, includeOffsets=True)
         trd_dydx = self.algo.connect_dYdX(sub_type=1, channel='trades', token=token)
+        self.add_server(url=net, req=acc_req)
         self.add_server(url=self.okx_ws, req=ord_okx)
         self.add_server(url=net, req=ord_dydx)
-        self.add_server(url=net, req=acc_req)
         self.add_server(url=net, req=trd_dydx)
 
     async def connect_to_server(self, server_url, req):
