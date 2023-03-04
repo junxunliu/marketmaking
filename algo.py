@@ -57,6 +57,7 @@ class Money_printer(Mediator):
         self.sz_dec[token] = token_info['size_decimal']
         self.td_sz[token] = self.min_sz[token]
         self.post_priority[token] = 0
+        self.ord_pts[token] = self.ord_mx_pts
 
         self.ord_df[token] = pd.DataFrame(columns=['id', 'sd', 'px', 'sz'])
 
@@ -117,6 +118,9 @@ class Money_printer(Mediator):
         sz_dec = self.sz_dec[token]
         balance_re = 0
         buy_px, sel_px = mid_px, mid_px
+        vol = self.ticks_vol(token)
+        step = step * vol
+        px_dec = self.min_dec[token]
         buy_px = round((buy_px - step), px_dec)
         sel_px = round((sel_px + step), px_dec)
         cl_rg = (step + tk) * self.ord_numbs
@@ -152,7 +156,7 @@ class Money_printer(Mediator):
                         px_rg = sel_px + step * sz_ra
                         sel_px = round(px_rg, px_dec)
                         self.post_priority[token] = 1
-                        if pos_sz > b_sz + b_sz :
+                        if pos_sz > b_sz + b_sz:
                             # b_sz = s_sz + s_sz
                             b_sz = s_sz + s_sz
                             b_sz = round(b_sz, sz_dec)
@@ -534,8 +538,8 @@ class Money_printer(Mediator):
             if res['type'] == 'channel_data':
                 if res['channel'] == 'v3_orderbook' and self.token:
                     self.maintain_orderbook(res, res['id'])
-                    # if self.account_connection:
-                    #     self.on_making(res['id'])
+                    if self.account_connection:
+                        self.on_making(res['id'])
 
                 elif res['channel'] == 'v3_accounts':
                     self.resolve_account_status(res)
