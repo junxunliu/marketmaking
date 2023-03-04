@@ -1,21 +1,39 @@
-from time import time
-from dydx3.constants import ORDER_TYPE_LIMIT
 
-spread = 2.0
-token = 'ETH'
-decimal = 1
-size = '0.1'
-limit_fee = '0.015'
-expire_time = time() + 1200
-order_type = ORDER_TYPE_LIMIT
 
-time = 1
 
-payload = {
-    'market': token + '-USD',
-    'order_type': order_type,
-    'post_only': False,
-    'size': size,
-    'limit_fee': limit_fee,
-    'expiration_epoch_seconds': expire_time
-}
+
+
+
+# trading_tokens = ['ETH-USD', 'FIL-USD', 'SOL-USD']
+trading_tokens = ['SOL-USD']
+
+commissions = 0.0002
+
+order_existing_time = 900
+order_numbers = 8
+
+def dYdX_token_config(token):
+    if token == 'ETH-USD':
+        token_info = {
+            'minimal_decimal': 1,
+            'minimal_size': 0.01,
+            'size_decimal': 2
+        }
+        return token_info
+
+    if token == 'FIL-USD':
+        token_info = {
+            'minimal_decimal': 2,
+            'minimal_size': 1,
+            'size_decimal': 0
+        }
+        return token_info
+
+    if token == 'SOL-USD':
+        token_info = {
+            'minimal_decimal': 3,
+            'minimal_size': 1,
+            'size_decimal': 0
+        }
+        return token_info
+
