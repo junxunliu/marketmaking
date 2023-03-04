@@ -23,9 +23,8 @@ class Money_printer(Mediator):
 
         self.token_numbers = len(config.trading_tokens)
         self.tm = config.order_existing_time
-        self.set_pairs = config.order_pairs
+        self.ord_numbs = config.order_numbers
         self.cms = config.commissions
-        self.rg = self.set_pairs * self.cms
 
         self.risk_on = {}
         self.ord_pts = {}
@@ -118,7 +117,9 @@ class Money_printer(Mediator):
         sz_dec = self.sz_dec[token]
         balance_re = 0
         buy_px, sel_px = mid_px, mid_px
-        cl_rg = (ask * self.rg + tk) * 10
+        buy_px = round((buy_px - step), px_dec)
+        sel_px = round((sel_px + step), px_dec)
+        cl_rg = (step + tk) * self.ord_numbs
         while True:
             post_on = 0
             b_re, a_re = {}, {}
@@ -151,8 +152,8 @@ class Money_printer(Mediator):
                         px_rg = sel_px + step * sz_ra
                         sel_px = round(px_rg, px_dec)
                         self.post_priority[token] = 1
-                        if pos_sz > b_sz + b_sz * adjust:
-                            # b_sz = s_sz + s_sz * adjust
+                        if pos_sz > b_sz + b_sz :
+                            # b_sz = s_sz + s_sz
                             b_sz = s_sz + s_sz
                             b_sz = round(b_sz, sz_dec)
                             b_sz = abs(b_sz)
@@ -163,8 +164,8 @@ class Money_printer(Mediator):
                         px_rg = buy_px - step * sz_ra
                         buy_px = round(px_rg, px_dec)
                         self.post_priority[token] = -1
-                        if pos_sz > s_sz + s_sz * adjust:
-                            # s_sz = b_sz + b_sz * adjust
+                        if pos_sz > s_sz + s_sz:
+                            # s_sz = b_sz + b_sz
                             s_sz = b_sz + b_sz
                             s_sz = round(s_sz, sz_dec)
                             s_sz = abs(s_sz)
