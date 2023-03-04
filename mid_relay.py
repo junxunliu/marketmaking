@@ -3,11 +3,14 @@ from dydx3.constants import *
 from dydx3.helpers.request_helpers import generate_now_iso
 
 import time
+from math import ceil
+from numpy import clip
 
 class Mediator:
     def __init__(self, client: Client):
         self.client = client
         self.position_id = client.private.get_account().data['account']['positionId']
+        self.ord_config = self.order_post_point_config()
 
     def sub_or_unsub(self, method):
         if method == 1:
@@ -63,6 +66,19 @@ class Mediator:
         }
         return okx_req
 
+    def order_post_point_config(self):
+        order_config = self.client.public.get_config()
+        p_ord_rate = order_config.data['placeOrderRateLimiting']
+        return p_ord_rate
+
+    def ord_pt_consped(self, o_n):
+        t_n = self.ord_config['targetNotional']
+        min_lord = self.ord_config['minLimitConsumption']
+        max_ord = self.ord_config['maxOrderConsumption']
+        ord_nation = ceil(t_n / o_n)
+        ord_point = clip(ord_nation, min_lord, max_ord)
+        return ord_point
+
     def create_limit_order(self, token, side, sz, px, tm=61, ccl_id=1):
         placed_order = self.client.private.create_order(
             position_id=self.position_id,
@@ -94,5 +110,6 @@ class Mediator:
     def acc_info(self):
         account_info = self.client.private.get_account()
         return account_info.data['account']
+
 
 
