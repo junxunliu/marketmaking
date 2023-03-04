@@ -14,6 +14,7 @@ import time
 class Money_printer(Mediator):
     def __init__(self, client: Client):
         super(Money_printer, self).__init__(client=client)
+        self.timer = None
         self.account_connection = False
 
         self.ord_config = self.order_post_point_config()
@@ -333,7 +334,7 @@ class Money_printer(Mediator):
                                                  tm=tm)
 
         elif time.time() > self.risk_on[token] + 3600:
-            self.rist_on[token] = 0
+            self.risk_on[token] = 0
             self.log_displayer(token=token,
                                risk='off')
 

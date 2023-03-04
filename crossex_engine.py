@@ -1,15 +1,14 @@
+import asyncio
+import datetime as dt
+import json
 import time
 
+import websockets
 from dydx3 import Client
 
-import mid_relay
-import config
 import algo
+import config
 
-import datetime as dt
-import websockets
-import asyncio
-import json
 
 class Perceiver:
     def __init__(self, client: Client):

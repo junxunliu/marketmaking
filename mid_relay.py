@@ -6,13 +6,15 @@ import time
 from math import ceil
 from numpy import clip
 
+
 class Mediator:
     def __init__(self, client: Client):
         self.client = client
         self.position_id = client.private.get_account().data['account']['positionId']
         self.ord_config = self.order_post_point_config()
 
-    def sub_or_unsub(self, method):
+    @staticmethod
+    def sub_or_unsub(method):
         if method == 1:
             return 'subscribe'
 
@@ -91,7 +93,7 @@ class Mediator:
             limit_fee='0.0015',
             expiration_epoch_seconds=time.time() + tm,
             time_in_force=TIME_IN_FORCE_GTT,
-            cancel_id = str(ccl_id)
+            cancel_id=str(ccl_id)
         )
         return placed_order.data['order']['id']
 
@@ -110,6 +112,4 @@ class Mediator:
     def acc_info(self):
         account_info = self.client.private.get_account()
         return account_info.data['account']
-
-
 
