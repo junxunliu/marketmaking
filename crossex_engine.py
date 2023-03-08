@@ -30,8 +30,8 @@ class Perceiver:
         self.add_server(url=net, req=acc_req)
 
     async def connect_to_server(self, server_url, req):
-        while True:
-            try:
+        # while True:
+        #     try:
                 async with websockets.connect(server_url) as ws:
                     exg = next(iter(req))
                     msg = self.adjust_subscribe_server(status=1,
@@ -47,7 +47,7 @@ class Perceiver:
                             self.mp.distribution_relay(res=res, exg=exg)
 
                         except asyncio.TimeoutError as e:
-                            try:
+                            # try:
                                 if exg == 'op':
                                     ping = 'ping'
 
@@ -58,18 +58,18 @@ class Perceiver:
                                 res = await ws.recv()
                                 continue
 
-                            except Exception as e:
-                                print(e, flush=True)
-                                print(dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                                      '============================================',
-                                      '| task_failure |', flush=True)
+                            # except Exception as e:
+                            #     print(e, flush=True)
+                            #     print(dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                            #           '============================================',
+                            #           '| task_failure |', flush=True)
 
-            except Exception as e:
-                print(e, flush=True)
-                print(dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                      '============================================',
-                      '| connection_shutdown | resubscribe |', flush=True)
-                time.sleep(1)
+            # except Exception as e:
+            #     print(e, flush=True)
+            #     print(dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            #           '============================================',
+            #           '| connection_shutdown | resubscribe |', flush=True)
+            #     time.sleep(1)
 
     async def multi_tasks(self):
         tasks = []

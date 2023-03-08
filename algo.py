@@ -1,20 +1,24 @@
+import datetime as dt
+import time
+
+import numpy as np
+import pandas as pd
 from dydx3 import Client
-from dydx3.constants import *
 from dydx3.helpers.request_helpers import generate_now_iso
 
-from mid_relay import Mediator
 import config
+from mid_relay import Mediator
 
-import datetime as dt
-import pandas as pd
-import numpy as np
-import time
+bid_id, ask_id = None, None
+buy_price, sell_price = None, None
 
 
 class Money_printer(Mediator):
     def __init__(self, client: Client):
         super(Money_printer, self).__init__(client=client)
-        self.timer = None
+        self.p_id = {}
+        self.timer = {}
+        self.re_time = None
         self.account_connection = False
 
         self.ord_config = self.order_post_point_config()
@@ -45,13 +49,12 @@ class Money_printer(Mediator):
         self.min_sz = {}
         self.min_dec = {}
         self.post_priority = {}
+        self.filled_orders = {}
 
         self.ord_df = {}
 
         self.ticks = {}
         self.time_update = {}
-
-        self.pair_id = 0
 
     def token_initialize(self, token):
         token_info = config.dYdX_token_config(token)
@@ -62,7 +65,7 @@ class Money_printer(Mediator):
         self.post_priority[token] = 0
         self.ord_pts[token] = self.ord_mx_pts
 
-        self.ord_df[token] = pd.DataFrame(columns=['id', 'sd', 'px', 'sz', 'pair_id'])
+        self.ord_df[token] = pd.DataFrame(columns=['id', 'sd', 'px', 'sz', 'p_id'])
 
         self.mid_px[token] = []
         self.bids_orderbook[token] = {'px': [], 'sz': [], 'of': []}
@@ -73,6 +76,8 @@ class Money_printer(Mediator):
 
         self.time_update[token] = generate_now_iso()[:-1]
         self.ticks[token] = 9999
+        self.re_time = time.time()
+        self.timer[token] = time.time()
 
     def acc_balance_distribution(self, token):
         account = self.acc_info()
@@ -90,15 +95,16 @@ class Money_printer(Mediator):
             mx_sz = max(total_sz * 0.01, self.min_sz[token])
             self.td_sz[token] = round(mx_sz, self.sz_dec[token])
 
-    def ord_reset_pts(self, token):
+    def ord_reset_pts(self, temp_time, token):
         if self.ord_pts[token] == self.ord_mx_pts:
             self.timer[token] = time.time()
 
-        if time.time() - self.timer[token] > self.ord_w_sec:
+        if temp_time - self.timer[token] > self.ord_w_sec:
             self.timer[token] = time.time()
             self.ord_pts[token] = self.ord_mx_pts
 
     def on_making(self, token):
+        temp_time = time.time()
         if self.risk_on[token] != 0:
             self.risk_executioner(token)
 
@@ -111,13 +117,14 @@ class Money_printer(Mediator):
 
             tick = pow(0.1, self.min_dec[token])
             border = self.cms * mid_px * 2 + tick
-            self.post_order(mid_px, bid, ask, tick, border, token)
+            self.post_order(mid_px, bid, ask, tick, border, token, temp_time)
+            self.ord_reset_pts(temp_time, token)
             if self.ticks[token] > 1000:
                 if generate_now_iso()[:-1] > self.time_update[token]:
                     self.acc_balance_distribution(token)
                     self.ticks[token] = 0
 
-    def post_order(self, mid_px, bid, ask, tk, step, token):
+    def post_order(self, mid_px, bid, ask, tk, step, token, temp_time):
         sz_dec = self.sz_dec[token]
         balance_re = 0
         buy_px, sel_px = mid_px, mid_px
@@ -129,204 +136,110 @@ class Money_printer(Mediator):
         # buy_px = round((buy_px - step), px_dec)
         # sel_px = round((sel_px + step), px_dec)
         cl_rg = (step + tk) * self.ord_numbs * 100
-        pair_id_a, pair_id_b = None, None
-        while True:
-            pair_time = time.time()
-            post_on = 0
-            b_re, a_re = {}, {}
-            ccl_b, ccl_a = 0, 0
-            b_sz = self.td_sz[token]
-            s_sz = self.td_sz[token]
-            for i in range(0, len(self.ord_df[token])):
-                ord_id = self.ord_df[token].iloc[i, 0]
-                ord_sd = self.ord_df[token].iloc[i, 1]
-                ord_px = self.ord_df[token].iloc[i, 2]
-                if ord_sd == 'SELL':
-                    a_re[ord_id] = 0
-                    if ask < ord_px - cl_rg:
-                        a_re[ord_id] = 1
-                        post_on = 1
+        global bid_id, ask_id, buy_price, sell_price
+        b_sz = self.td_sz[token]
+        s_sz = self.td_sz[token]
 
-                elif ord_sd == 'BUY':
-                    b_re[ord_id] = 0
-                    if bid > ord_px + cl_rg:
-                        b_re[ord_id] = 1
-                        post_on = 1
+        ord_numbs = len(self.ord_df[token])
+        if self.ord_pts[token] > self.ord_mx_consump * 3:
+            if ord_numbs == 0:
+                try:
+                    self.log_displayer(token=token,
+                                       points=self.ord_pts[token],
+                                       ord_bid=buy_px,
+                                       ord_ask=sel_px,
+                                       ord_len=ord_numbs)
 
-            ord_numbs = len(self.ord_df[token])
-            if self.ord_pts[token] > self.ord_mx_consump * 3:
-                if ord_numbs == 0:
-                    # if ord_numbs <= self.ord_numbs or post_on == 1:
-                    #     acc_sz = abs(self.pos_size[token])
-                    #     pos_sz = acc_sz - balance_re
-                    #     if self.pos_size[token] < 0:
-                    #         sz_ra = pos_sz / b_sz
-                    #         px_rg = sel_px + step * sz_ra
-                    #         sel_px = round(px_rg, px_dec)
-                    #         self.post_priority[token] = 1
-                    #         if pos_sz > b_sz + b_sz:
-                    #             # b_sz = s_sz + s_sz
-                    #             b_sz = s_sz + s_sz
-                    #             b_sz = round(b_sz, sz_dec)
-                    #             b_sz = abs(b_sz)
-                    #             balance_re += b_sz
-                    #
-                    #     elif self.pos_size[token] > 0:
-                    #         sz_ra = pos_sz / s_sz
-                    #         px_rg = buy_px - step * sz_ra
-                    #         buy_px = round(px_rg, px_dec)
-                    #         self.post_priority[token] = -1
-                    #         if pos_sz > s_sz + s_sz:
-                    #             # s_sz = b_sz + b_sz
-                    #             s_sz = b_sz + b_sz
-                    #             s_sz = round(s_sz, sz_dec)
-                    #             s_sz = abs(s_sz)
-                    #             balance_re += s_sz
-                    try:
-                        self.log_displayer(token=token,
-                                           points=self.ord_pts[token],
-                                           ord_bid=buy_px,
-                                           ord_ask=sel_px,
-                                           bid=bid,
-                                           ask=ask)
-                        self.pair_id += 1
-                        pair_id_a = str(self.pair_id) + 'a'
-                        pair_id_b = str(self.pair_id) + 'b'
+                    buy_price, bid_id = self.post_bids(b_px=buy_px,
+                                                       b_sz=b_sz,
+                                                       token=token)
 
-                        if self.post_priority[token] > 0:
-                            buy_px = self.post_bids(b_re=b_re,
-                                                    ccl_b=ccl_b,
-                                                    b_px=buy_px,
-                                                    b_sz=b_sz,
-                                                    step=step,
-                                                    token=token,
-                                                    pair_time=pair_id_b)
+                    sell_price, ask_id = self.post_asks(s_px=sel_px,
+                                                        s_sz=s_sz,
+                                                        step=step,
+                                                        token=token)
+                except Exception as e:
+                    print(e)
+            bid, ask = self.bid_d[token], self.ask_d[token]
+            df_s = self.ord_df[token][self.ord_df[token]['sd'] == 'SELL']
+            df_b = self.ord_df[token][self.ord_df[token]['sd'] == 'BUY']
+            sleep = temp_time - self.re_time
+            # buy order not filled
+            if len(df_s) == 0 and len(df_b) != 0 and sleep > 1:
+                if sell_price > buy_price:
+                    if bid < sell_price - self.cms:
+                        buy_price = bid
+                    self.re_time = time.time()
+                    self.log_displayer(token=token,
+                                       points=self.ord_pts[token],
+                                       ord_bid=buy_price,
+                                       ord_len=ord_numbs)
+                    buy_price, bid_id = self.post_bids(b_px=buy_price,
+                                                       b_sz=b_sz,
+                                                       token=token,
+                                                       ccl_id=bid_id)
+            # sell order not filled
+            elif len(df_b) == 0 and len(df_s) != 0 and sleep > 1:
+                if sell_price > buy_price:
+                    if ask > buy_price + self.cms:
+                        sell_price = ask
+                    self.re_time = time.time()
+                    self.log_displayer(token=token,
+                                       points=self.ord_pts[token],
+                                       ord_ask=sell_price,
+                                       ord_len=ord_numbs)
+                    sell_price, ask_id = self.post_asks(s_px=sell_price,
+                                                        s_sz=s_sz,
+                                                        step=step,
+                                                        token=token,
+                                                        ccl_id=ask_id)
 
-                            sel_px = self.post_asks(a_re=a_re,
-                                                    ccl_a=ccl_a,
-                                                    s_px=sel_px,
-                                                    s_sz=s_sz,
-                                                    step=step,
-                                                    token=token,
-                                                    pair_time=pair_id_a)
-
-                        elif self.post_priority[token] <= 0:
-                            sel_px = self.post_asks(a_re=a_re,
-                                                    ccl_a=ccl_a,
-                                                    s_px=sel_px,
-                                                    s_sz=s_sz,
-                                                    step=step,
-                                                    token=token,
-                                                    pair_time=pair_id_a)
-
-                            buy_px = self.post_bids(b_re=b_re,
-                                                    ccl_b=ccl_b,
-                                                    b_px=buy_px,
-                                                    b_sz=b_sz,
-                                                    step=step,
-                                                    token=token,
-                                                    pair_time=pair_id_b)
-                    except:
-                        break
-                bid, ask = self.bid_d[token], self.ask_d[token]
-                df_s = self.ord_df[token][self.ord_df[token]['sd'] == 'SELL']
-                df_b = self.ord_df[token][self.ord_df[token]['sd'] == 'BUY']
-                # buy order not filled
-                if len(df_s) == 0 and len(df_b) != 0:
-                    if ask > buy_px:
-                        if ask < sel_px - self.cms:
-                            buy_px = ask
-                        buy_px = self.post_bids(b_re=b_re,
-                                                ccl_b=ccl_b,
-                                                b_px=buy_px,
-                                                b_sz=b_sz,
-                                                step=step,
-                                                token=token,
-                                                pair_time=pair_id_b)
-                        time.sleep(1)
-                    else:
-                        break
-                # sell order not filled
-                elif len(df_b) == 0 and len(df_s) != 0:
-                    if sel_px > bid:
-                        if bid > buy_px + self.cms:
-                            sel_px = bid
-                        sel_px = self.post_asks(a_re=a_re,
-                                                ccl_a=ccl_a,
-                                                s_px=sel_px,
-                                                s_sz=s_sz,
-                                                step=step,
-                                                token=token,
-                                                pair_time=pair_id_a)
-                        time.sleep(1)
-                    else:
-                        break
-                else:
-                    break
-            else:
-                break
-
-    def post_bids(self, b_re, ccl_b, b_px, b_sz, step, token, pair_time):
-        if b_re:
-            if 1 in b_re.values():
-                cl_idx = list(b_re.values()).index(1)
-                ccl_b = list(b_re.keys())[cl_idx]
-
-            elif len(self.ord_df[token]) > self.ord_numbs:
-                cl_idx = list(b_re.values()).index(0)
-                ccl_b = list(b_re.keys())[cl_idx]
-
-        bid_id = self.create_limit_order(token=token,
-                                         side='BUY',
-                                         sz=b_sz,
-                                         px=b_px,
-                                         tm=self.tm,
-                                         ccl_id=ccl_b)
-
-        new_ord = {'id': bid_id,
-                   'sd': 'BUY',
-                   'px': b_px,
-                   'sz': b_sz,
-                   'pair_time': pair_time}
-        self.adjust_df_row('ord', 'add', new_ord, token)
-        self.adjust_df_row('ord', 'ccl', ccl_b, token)
+    def post_bids(self, b_px, b_sz, token, ccl_id=None):
         pts_consumpt = self.ord_pt_consped(b_sz * b_px)
         self.ord_pts[token] -= pts_consumpt
 
+        bid_id_ = self.create_limit_order(token=token,
+                                          side='BUY',
+                                          sz=b_sz,
+                                          px=b_px,
+                                          tm=self.tm,
+                                          ccl_id=ccl_id)
+        print("ccl", ccl_id)
+
+        new_ord = {'id': bid_id_,
+                   'sd': 'BUY',
+                   'px': b_px,
+                   'sz': b_sz}
+        self.adjust_df_row('ord', 'add', new_ord, token)
+        self.adjust_df_row('ord', 'ccl', ccl_id, token)
+
         b_px = round(b_px + config.sol_spread / 3, self.min_dec[token])
         # b_px = round((b_px - step), self.min_dec[token])
-        return b_px
 
-    def post_asks(self, a_re, ccl_a, s_px, s_sz, step, token, pair_time):
-        if a_re:
-            if 1 in a_re.values():
-                cl_idx = list(a_re.values()).index(1)
-                ccl_a = list(a_re.keys())[cl_idx]
+        return b_px, bid_id_
 
-            elif len(self.ord_df[token]) > self.ord_numbs:
-                cl_idx = list(a_re.values()).index(0)
-                ccl_a = list(a_re.keys())[cl_idx]
-
-        ask_id = self.create_limit_order(token=token,
-                                         side='SELL',
-                                         sz=s_sz,
-                                         px=s_px,
-                                         tm=self.tm,
-                                         ccl_id=ccl_a)
-
-        new_ord = {'id': ask_id,
-                   'sd': 'SELL',
-                   'px': s_px,
-                   'sz': s_sz,
-                   'pair_time': pair_time}
-        self.adjust_df_row('ord', 'add', new_ord, token)
-        self.adjust_df_row('ord', 'ccl', ccl_a, token)
+    def post_asks(self, s_px, s_sz, step, token, ccl_id=None):
         pts_consumpt = self.ord_pt_consped(s_sz * s_px)
         self.ord_pts[token] -= pts_consumpt
 
+        ask_id_ = self.create_limit_order(token=token,
+                                          side='SELL',
+                                          sz=s_sz,
+                                          px=s_px,
+                                          tm=self.tm,
+                                          ccl_id=ccl_id)
+        print("ccl", ccl_id)
+
+        new_ord = {'id': ask_id_,
+                   'sd': 'SELL',
+                   'px': s_px,
+                   'sz': s_sz}
+        self.adjust_df_row('ord', 'add', new_ord, token)
+        self.adjust_df_row('ord', 'ccl', ccl_id, token)
+
         s_px = round(s_px - config.sol_spread / 3, self.min_dec[token])
         # s_px = round((s_px + step), self.min_dec[token])
-        return s_px
+        return s_px, ask_id_
 
     def adjust_df_row(self, type, method, object, token):
         if type == 'ord':
@@ -530,7 +443,7 @@ class Money_printer(Mediator):
     def resolve_account_status(self, res):
         acc_content = res['contents']
         if 'fills' in acc_content:
-            if acc_content['fills'] != []:
+            if acc_content['fills']:
                 for i in range(0, len(acc_content['fills'])):
                     fill_sz = acc_content['fills'][i]['size']
                     fill_id = acc_content['fills'][i]['orderId']
@@ -541,18 +454,25 @@ class Money_printer(Mediator):
                                                token=fill_token)
 
         if 'positions' in acc_content:
-            if acc_content['positions'] != []:
+            if acc_content['positions']:
                 for i in range(0, len(acc_content['positions'])):
                     pos_token = acc_content['positions'][i]['market']
                     pos_size = float(acc_content['positions'][i]['size'])
                     if pos_token in self.token:
                         self.pos_size[pos_token] = float(pos_size)
 
-        if acc_content['orders'] != []:
+        if acc_content.get('orders'):
             for i in range(0, len(acc_content['orders'])):
-                if acc_content['orders'][i]['status'] == 'CANCELED':
-                    ord_token = acc_content['orders'][i]['market']
-                    ord_id = acc_content['orders'][i]['id']
+                status = acc_content['orders'][i]['status']
+                ord_token = acc_content['orders'][i]['market']
+                ord_id = acc_content['orders'][i]['id']
+                if status == 'CANCELED':
+                    if ord_token in self.token:
+                        self.adjust_df_row(type='ord',
+                                           method='ccl',
+                                           object=ord_id,
+                                           token=ord_token)
+                elif status == 'FILLED':
                     if ord_token in self.token:
                         self.adjust_df_row(type='ord',
                                            method='ccl',
@@ -608,7 +528,8 @@ class Money_printer(Mediator):
                                        event=res['type'],
                                        channel=res['channel'])
 
-    def log_displayer(self, **kwargs):
+    @staticmethod
+    def log_displayer(**kwargs):
         log_lst = []
         for key, value in kwargs.items():
             if key == 'exchange':

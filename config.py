@@ -1,3 +1,9 @@
+
+
+
+
+
+
 # trading_tokens = ['ETH-USD', 'FIL-USD', 'SOL-USD']
 trading_tokens = ['SOL-USD']
 sol_spread = 0.003
@@ -31,3 +37,4 @@ def dYdX_token_config(token):
             'size_decimal': 0
         }
         return token_info
+
