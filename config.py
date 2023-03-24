@@ -6,12 +6,11 @@
 
 # trading_tokens = ['ETH-USD', 'FIL-USD', 'SOL-USD']
 trading_tokens = ['SOL-USD']
-sol_spread = 0.003
+
 commissions = 0.0002
 
-order_existing_time = 900
-order_numbers = 1
-
+order_existing_time = 3600
+order_numbers = 8
 
 def dYdX_token_config(token):
     if token == 'ETH-USD':

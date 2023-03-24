@@ -1,14 +1,15 @@
-import asyncio
-import datetime as dt
-import json
 import time
 
-import websockets
 from dydx3 import Client
 
-import algo
+import mid_relay
 import config
+import algo
 
+import datetime as dt
+import websockets
+import asyncio
+import json
 
 class Perceiver:
     def __init__(self, client: Client):
@@ -19,9 +20,14 @@ class Perceiver:
 
     def init_connect(self, net):
         for token in self.tokens:
+            trd_dydx = self.mp.connect_trades_dYdX(type=1,
+                                                   channel='trades',
+                                                   token=token)
+
             ord_dydx = self.mp.connect_orderbook_dYdX(type=1,
                                                       channel='orderbook',
                                                       token=token)
+            self.add_server(url=net, req=trd_dydx)
             self.add_server(url=net, req=ord_dydx)
 
         ord_okx = self.mp.connect_orderbook_okx(type=1, tokens=self.tokens)
@@ -30,8 +36,9 @@ class Perceiver:
         self.add_server(url=net, req=acc_req)
 
     async def connect_to_server(self, server_url, req):
-        # while True:
-        #     try:
+        a = 0
+        while True:
+            try:
                 async with websockets.connect(server_url) as ws:
                     exg = next(iter(req))
                     msg = self.adjust_subscribe_server(status=1,
@@ -42,7 +49,7 @@ class Perceiver:
                     await ws.send(json.dumps(msg))
                     while True:
                         try:
-                            js_res = await asyncio.wait_for(ws.recv(), timeout=9)
+                            js_res = await asyncio.wait_for(ws.recv(), timeout=13)
                             res = json.loads(js_res)
                             self.mp.distribution_relay(res=res, exg=exg)
 
@@ -64,12 +71,14 @@ class Perceiver:
                             #           '============================================',
                             #           '| task_failure |', flush=True)
 
-            # except Exception as e:
-            #     print(e, flush=True)
-            #     print(dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            #           '============================================',
-            #           '| connection_shutdown | resubscribe |', flush=True)
-            #     time.sleep(1)
+            except Exception as e:
+                print(e, flush=True)
+                print(dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                      '============================================',
+                      '| connection_shutdown | resubscribe |', flush=True)
+                a += 1
+                if a > 13:
+                    break
 
     async def multi_tasks(self):
         tasks = []
@@ -89,6 +98,12 @@ class Perceiver:
                     msg = self.mp.connect_orderbook_dYdX(type=status,
                                                          channel='orderbook',
                                                          token=req['id'])
+                    return msg
+
+                elif req['channel'] == 'v3_trades':
+                    msg = self.mp.connect_trades_dYdX(type=status,
+                                                      channel='trades',
+                                                      token=req['id'])
                     return msg
 
                 elif req['channel'] == 'v3_accounts':

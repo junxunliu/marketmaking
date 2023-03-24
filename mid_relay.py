@@ -6,15 +6,13 @@ import time
 from math import ceil
 from numpy import clip
 
-
 class Mediator:
     def __init__(self, client: Client):
         self.client = client
         self.position_id = client.private.get_account().data['account']['positionId']
         self.ord_config = self.order_post_point_config()
 
-    @staticmethod
-    def sub_or_unsub(method):
+    def sub_or_unsub(self, method):
         if method == 1:
             return 'subscribe'
 
@@ -54,6 +52,14 @@ class Mediator:
         }
         return req
 
+    def connect_trades_dYdX(self, type, channel, token):
+        req = {
+            'type': self.sub_or_unsub(method=type),
+            'channel': 'v3_' + channel,
+            'id': token,
+        }
+        return req
+
     def connect_orderbook_okx(self, type, tokens):
         channels = []
         if tokens:
@@ -81,7 +87,7 @@ class Mediator:
         ord_point = clip(ord_nation, min_lord, max_ord)
         return ord_point
 
-    def create_limit_order(self, token, side, sz, px, tm=61, ccl_id=1):
+    def create_limit_order(self, token, side, sz, px, tm=66, ccl_id=1):
         placed_order = self.client.private.create_order(
             position_id=self.position_id,
             market=token,
@@ -93,23 +99,40 @@ class Mediator:
             limit_fee='0.0015',
             expiration_epoch_seconds=time.time() + tm,
             time_in_force=TIME_IN_FORCE_GTT,
-            cancel_id=str(ccl_id)
+            cancel_id = str(ccl_id)
         )
         return placed_order.data['order']['id']
 
-    def cancel_order(self, token, side, id):
-        ccl_order = self.client.private.cancel_active_orders(
+    def create_market_order(self, token, side, sz):
+        placed_order = self.client.private.create_order(
+            position_id=self.position_id,
             market=token,
             side=side,
-            id=id
+            order_type=ORDER_TYPE_MARKET,
+            post_only=False,
+            size=str(sz),
+            price=str(1 if side == 'SELL' else 999999),
+            limit_fee='0.0015',
+            expiration_epoch_seconds=time.time() + 66,
+            time_in_force=TIME_IN_FORCE_FOK,
         )
-        return ccl_order.data
+        return placed_order.data['order']['id']
 
     def cancel_all_order(self, token):
         clean_order = self.client.private.cancel_all_orders(market=token)
         return clean_order.data
 
+    def check_orders(self, token):
+        all_orders = self.client.private.get_orders(
+            market=token,
+            status=ORDER_STATUS_OPEN,
+            limit=50,
+        )
+        return all_orders.data['orders']
+
     def acc_info(self):
         account_info = self.client.private.get_account()
         return account_info.data['account']
+
+
 
